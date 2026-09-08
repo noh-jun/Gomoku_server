@@ -72,9 +72,14 @@ class GameSettings:
             raise ConfigError("game_type must be a GameType.")
         if not isinstance(self.starting_color, Color):
             raise ConfigError("starting_color must be a Color.")
+        if (
+            self.turn_time_limit_sec is not None
+            and self.turn_time_limit_sec not in SUPPORTED_TURN_TIME_LIMITS
+        ):
+            raise ConfigError(
+                "turn_time_limit_sec must be 5, 10, 15, 30, 60, or null."
+            )
         if self.game_type is GameType.OTHELLO:
-            if self.turn_time_limit_sec is not None:
-                raise ConfigError("Othello does not support a turn timer.")
             if self.board_size != OTHELLO_BOARD_SIZE:
                 raise ConfigError("Othello board_size must be 8.")
             if self.win_length is not None:
@@ -82,11 +87,6 @@ class GameSettings:
             if self.starting_color is not OTHELLO_STARTING_COLOR:
                 raise ConfigError("Othello starting_color must be BLACK.")
             return
-        if (
-            self.turn_time_limit_sec is not None
-            and self.turn_time_limit_sec not in SUPPORTED_TURN_TIME_LIMITS
-        ):
-            raise ConfigError("turn_time_limit_sec must be 5, 10, 15, 30, 60, or null.")
         if self.board_size < MIN_WIN_LENGTH:
             raise ConfigError(f"board_size must be >= {MIN_WIN_LENGTH}.")
         if (

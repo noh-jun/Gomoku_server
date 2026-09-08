@@ -73,8 +73,14 @@ class TurnExpiredError(GameError):
     code = "TURN_EXPIRED"
     default_message = "The turn time limit expired before this move arrived."
 
-    def __init__(self, timed_out_color: object, message: Optional[str] = None) -> None:
+    def __init__(
+        self,
+        timed_out_color: object,
+        message: Optional[str] = None,
+        timeout_result: Optional[object] = None,
+    ) -> None:
         self.timed_out_color = timed_out_color
+        self.timeout_result = timeout_result
         super().__init__(message)
 
 

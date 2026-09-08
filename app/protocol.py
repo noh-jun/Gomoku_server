@@ -389,11 +389,6 @@ def parse_client_message(raw: str) -> ClientCommand:
                 ErrorCode.INVALID_TURN_TIME_LIMIT,
                 "'turn_time_limit_sec' must be 5, 10, 15, 30, 60, or null.",
             )
-        if game_type is GameType.OTHELLO and turn_limit is not None:
-            raise ProtocolError(
-                ErrorCode.UNSUPPORTED_GAME_OPTION,
-                "Othello does not support a turn timer.",
-            )
         return CreateRoomCommand(room_name, game_type, turn_limit)
     if message_type is ClientMessageType.LEAVE_ROOM:
         return LeaveRoomCommand()
@@ -434,6 +429,16 @@ def connected(settings: GameSettings) -> dict[str, Any]:
     return {
         "type": ServerMessageType.CONNECTED.value,
         "supported_game_types": [game_type.value for game_type in SUPPORTED_GAME_TYPES],
+        "room_creation_options": {
+            GameType.GOMOKU.value: {
+                "turn_time_limits": [None, *SUPPORTED_TURN_TIME_LIMITS],
+                "timeout_action": "SKIP_TURN",
+            },
+            GameType.OTHELLO.value: {
+                "turn_time_limits": [None, *SUPPORTED_TURN_TIME_LIMITS],
+                "timeout_action": "RANDOM_LEGAL_MOVE",
+            },
+        },
         "account_creation_supported": True,
         "login_supported": True,
         **settings_fields(settings),
@@ -677,11 +682,12 @@ def game_state(
     game: GameEngine,
     turn_remaining_ms: Optional[int] = None,
     turn_revision: int = 0,
+    settings: Optional[GameSettings] = None,
 ) -> dict[str, Any]:
     """Full state synchronisation, including the result of a finished game."""
     payload: dict[str, Any] = {
         "type": ServerMessageType.GAME_STATE.value,
-        **settings_fields(game.settings),
+        **settings_fields(settings or game.settings),
         "board": game.board_snapshot(),
         "current_turn": game.current_turn.value if game.current_turn else None,
         "winner": game.winner.value if game.winner else None,
@@ -753,13 +759,22 @@ def undo_result(
     }
 
 
-def turn_timeout(timed_out_color: Color, current_turn: Color) -> dict[str, Any]:
-    return {
+def turn_timeout(
+    game_type: GameType,
+    timed_out_color: Color,
+    current_turn: Optional[Color],
+    automatic_move: Optional[MoveResult] = None,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
         "type": ServerMessageType.TURN_TIMEOUT.value,
-        "game_type": GameType.GOMOKU.value,
+        "game_type": game_type.value,
         "timed_out_color": timed_out_color.value,
-        "current_turn": current_turn.value,
+        "current_turn": current_turn.value if current_turn else None,
     }
+    if automatic_move is not None:
+        payload["action"] = "RANDOM_LEGAL_MOVE"
+        payload["move"] = {"x": automatic_move.x, "y": automatic_move.y}
+    return payload
 
 
 def pong() -> dict[str, Any]:

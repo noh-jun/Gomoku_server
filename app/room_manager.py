@@ -139,6 +139,7 @@ class RoomManager:
                     board_size=OTHELLO_BOARD_SIZE,
                     win_length=None,
                     starting_color=OTHELLO_STARTING_COLOR,
+                    turn_time_limit_sec=turn_time_limit_sec,
                 )
             room = GameRoom.from_settings(room_id, settings, room_name=normalized_name)
             logger.info(

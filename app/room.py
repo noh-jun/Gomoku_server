@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import math
+import secrets
 import time
 from dataclasses import dataclass, field
 from enum import Enum
@@ -109,7 +110,8 @@ class RoomSummary:
 @dataclass(frozen=True)
 class TurnTimeoutResult:
     timed_out_color: Color
-    current_turn: Color
+    current_turn: Optional[Color]
+    automatic_move: Optional[MoveResult] = None
 
 
 @dataclass(frozen=True)
@@ -207,6 +209,7 @@ class GameRoom:
                 win_length=win_length,
                 starting_color=starting_color,
                 game_type=game_type,
+                turn_time_limit_sec=turn_time_limit_sec,
             )
             self.game = OthelloGame.from_settings(settings, status=GameStatus.WAITING)
         else:
@@ -306,7 +309,7 @@ class GameRoom:
 
     def _start_turn_timer_locked(self, duration: Optional[float] = None) -> None:
         self.turn_revision += 1
-        if self.game_type is not GameType.GOMOKU or self.turn_time_limit_sec is None:
+        if self.turn_time_limit_sec is None:
             self.turn_deadline_monotonic = None
             self.paused_turn_remaining_sec = None
             return
@@ -326,13 +329,33 @@ class GameRoom:
         deadline = self.turn_deadline_monotonic
         if deadline is None or time.monotonic() < deadline:
             return None
-        if not isinstance(self.game, GomokuGame) or self.game.current_turn is None:
+        if self.game.current_turn is None:
             self._clear_turn_timer_locked()
             return None
         timed_out = self.game.current_turn
-        current = self.game.skip_turn(timed_out)
-        self._start_turn_timer_locked()
-        return TurnTimeoutResult(timed_out, current)
+        if isinstance(self.game, GomokuGame):
+            current = self.game.skip_turn(timed_out)
+            self._start_turn_timer_locked()
+            return TurnTimeoutResult(timed_out, current)
+
+        legal_moves = self.game.legal_moves_for_current_turn
+        if not legal_moves:
+            # OthelloGame resolves forced passes after every accepted move, so
+            # a playing turn should always have at least one legal position.
+            self._clear_turn_timer_locked()
+            return None
+        x, y = secrets.choice(legal_moves)
+        automatic_move = self.game.make_move(timed_out, x, y)
+        if automatic_move.is_game_over:
+            self.ready_connections.clear()
+            self._clear_turn_timer_locked()
+        else:
+            self._start_turn_timer_locked()
+        return TurnTimeoutResult(
+            timed_out,
+            automatic_move.next_turn,
+            automatic_move=automatic_move,
+        )
 
     async def expire_turn(self, revision: int) -> Optional[TurnTimeoutResult]:
         async with self.lock:
@@ -503,7 +526,9 @@ class GameRoom:
                 raise UndoPendingError()
             expired = self._expire_turn_locked()
             if expired is not None:
-                raise TurnExpiredError(expired.timed_out_color)
+                raise TurnExpiredError(
+                    expired.timed_out_color, timeout_result=expired
+                )
             if not self.players_full and self.game.status is GameStatus.WAITING:
                 raise GameNotStartedError("Waiting for the second player.")
             result = self.game.make_move(player.color, x, y)
@@ -540,7 +565,9 @@ class GameRoom:
                 )
             expired = self._expire_turn_locked()
             if expired is not None:
-                raise TurnExpiredError(expired.timed_out_color)
+                raise TurnExpiredError(
+                    expired.timed_out_color, timeout_result=expired
+                )
 
             history = self.game.move_history
             if self.game.current_turn is player.color:
@@ -592,7 +619,9 @@ class GameRoom:
                 raise UndoPendingError()
             expired = self._expire_turn_locked()
             if expired is not None:
-                raise TurnExpiredError(expired.timed_out_color)
+                raise TurnExpiredError(
+                    expired.timed_out_color, timeout_result=expired
+                )
             result = self.game.resign(player.color)
             self.ready_connections.clear()
             self._clear_turn_timer_locked()

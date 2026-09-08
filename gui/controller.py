@@ -231,6 +231,7 @@ class ServerController:
                 port=config.port,
                 log_level="info",
                 access_log=False,
+                log_config=None,
             )
             server = uvicorn.Server(uvicorn_config)
             thread = threading.Thread(

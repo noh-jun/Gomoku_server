@@ -324,6 +324,10 @@ class ServerGUI:
             # Should not happen (the button is disabled), but stay safe.
             messagebox.showinfo("Server", "The server is already running.")
             return
+        except Exception as exc:  # noqa: BLE001 - report startup failure in the GUI
+            logger.exception("Could not start the server: %s", exc)
+            self._apply_state(STATE_STOPPED)
+            return
 
         self._apply_state(STATE_STARTING)
 

@@ -69,7 +69,15 @@ from .protocol import (
     UndoRequestCommand,
     UndoResponseCommand,
 )
-from .room import MAX_PLAYERS, MAX_ROOM_MEMBERS, GameRoom, JoinResult, Member, MemberRole
+from .room import (
+    MAX_PLAYERS,
+    MAX_ROOM_MEMBERS,
+    GameRoom,
+    JoinResult,
+    Member,
+    MemberRole,
+    TurnTimeoutResult,
+)
 from .room_manager import RoomManager
 
 logger = logging.getLogger("gomoku")
@@ -535,7 +543,10 @@ async def _handle_move(
     try:
         result = await room.make_move(session.connection_id, command.x, command.y)
     except TurnExpiredError as exc:
-        await _broadcast_turn_timeout(gateway, room, exc.timed_out_color)
+        timeout_result = exc.timeout_result or TurnTimeoutResult(
+            exc.timed_out_color, room.game.current_turn
+        )
+        await _broadcast_turn_timeout(gateway, room, timeout_result)
         await _send_error(gateway, session, exc.code, exc.message)
         return
     except ForbiddenMoveError as exc:
@@ -654,7 +665,10 @@ async def _handle_undo_request(
         room = _require_room(gateway, session)
         result = await room.request_undo(session.connection_id)
     except TurnExpiredError as exc:
-        await _broadcast_turn_timeout(gateway, room, exc.timed_out_color)
+        timeout_result = exc.timeout_result or TurnTimeoutResult(
+            exc.timed_out_color, room.game.current_turn
+        )
+        await _broadcast_turn_timeout(gateway, room, timeout_result)
         await _send_error(gateway, session, exc.code, exc.message)
         return
     except GameError as exc:
@@ -680,7 +694,10 @@ async def _handle_resign(gateway: Gateway, session: ClientSession) -> None:
         room = _require_room(gateway, session)
         result = await room.resign(session.connection_id)
     except TurnExpiredError as exc:
-        await _broadcast_turn_timeout(gateway, room, exc.timed_out_color)
+        timeout_result = exc.timeout_result or TurnTimeoutResult(
+            exc.timed_out_color, room.game.current_turn
+        )
+        await _broadcast_turn_timeout(gateway, room, timeout_result)
         await _send_error(gateway, session, exc.code, exc.message)
         return
     except GameError as exc:
@@ -777,6 +794,7 @@ def _game_state(room: GameRoom) -> dict[str, Any]:
         room.game,
         turn_remaining_ms=room.turn_remaining_ms,
         turn_revision=room.turn_revision,
+        settings=room.settings,
     )
 
 
@@ -808,7 +826,7 @@ def _sync_turn_timer(gateway: Gateway, room: GameRoom) -> None:
             await asyncio.sleep(max(0.0, deadline - time.monotonic()))
             result = await room.expire_turn(revision)
             if result is not None:
-                await _broadcast_turn_timeout(gateway, room, result.timed_out_color)
+                await _broadcast_turn_timeout(gateway, room, result)
             elif room.turn_revision == revision and room.turn_deadline_monotonic:
                 _sync_turn_timer(gateway, room)
         except asyncio.CancelledError:
@@ -821,16 +839,44 @@ def _sync_turn_timer(gateway: Gateway, room: GameRoom) -> None:
 
 
 async def _broadcast_turn_timeout(
-    gateway: Gateway, room: GameRoom, timed_out_color: Color
+    gateway: Gateway, room: GameRoom, result: TurnTimeoutResult
 ) -> None:
-    current_turn = room.game.current_turn
-    if current_turn is None:
-        return
     await gateway.manager.broadcast_to_room(
-        room, protocol.turn_timeout(timed_out_color, current_turn)
+        room,
+        protocol.turn_timeout(
+            room.game_type,
+            result.timed_out_color,
+            result.current_turn,
+            result.automatic_move,
+        ),
     )
+    automatic_move = result.automatic_move
+    if automatic_move is not None:
+        logger.info(
+            "[ROOM %s] %s TIMEOUT -> AUTO MOVE (%d, %d)",
+            room.room_id,
+            result.timed_out_color.value,
+            automatic_move.x,
+            automatic_move.y,
+        )
+        await gateway.manager.broadcast_to_room(
+            room, protocol.move_result(automatic_move)
+        )
     await gateway.manager.broadcast_to_room(room, _game_state(room))
     _sync_turn_timer(gateway, room)
+    if automatic_move is not None and automatic_move.is_game_over:
+        if automatic_move.winner is None:
+            logger.info("[ROOM %s] DRAW", room.room_id)
+        else:
+            logger.info(
+                "[ROOM %s] %s WIN",
+                room.room_id,
+                automatic_move.winner.value,
+            )
+        await gateway.manager.broadcast_to_room(
+            room, protocol.game_over(automatic_move)
+        )
+        await _broadcast_room_list(gateway)
 
 
 def _reject_if_in_room(session: ClientSession) -> None:
