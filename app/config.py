@@ -9,6 +9,7 @@ to every room and game.
 from __future__ import annotations
 
 import os
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Final, Mapping, Optional
@@ -35,9 +36,16 @@ MIN_WIN_LENGTH: Final[int] = 2
 OTHELLO_BOARD_SIZE: Final[int] = 8
 OTHELLO_STARTING_COLOR: Final[Color] = Color.BLACK
 SUPPORTED_TURN_TIME_LIMITS: Final[tuple[int, ...]] = (5, 10, 15, 30, 60)
-DEFAULT_ACCOUNT_DB_PATH: Final[Path] = (
-    Path(__file__).resolve().parents[1] / "data" / "accounts.db"
-)
+
+
+def _application_root() -> Path:
+    """Return the source root, or the executable directory when frozen."""
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parents[1]
+
+
+DEFAULT_ACCOUNT_DB_PATH: Final[Path] = _application_root() / "data" / "accounts.db"
 
 
 class ConfigError(ValueError):

@@ -23,7 +23,6 @@ pytest_out.txt
 
 # Packaging and build output
 build/
-dist/
 *.egg-info/
 .eggs/
 

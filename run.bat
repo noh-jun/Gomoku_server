@@ -17,26 +17,8 @@ set "NEEDS_INSTALL="
 
 if not exist "%VENV_PY%" (
     echo [run] Creating virtual environment in .venv ...
-    set "BASE_PY="
-    where py >nul 2>nul
-    if not errorlevel 1 set "BASE_PY=py -3"
-    if not defined BASE_PY (
-        where python3 >nul 2>nul
-        if not errorlevel 1 set "BASE_PY=python3"
-    )
-    if not defined BASE_PY (
-        where python >nul 2>nul
-        if not errorlevel 1 set "BASE_PY=python"
-    )
-    if not defined BASE_PY (
-        echo [run] ERROR: no Python launcher found. Install Python 3.11+ first.
-        exit /b 1
-    )
-    %BASE_PY% -m venv ".venv"
-    if not exist "%VENV_PY%" (
-        echo [run] ERROR: failed to create .venv
-        exit /b 1
-    )
+    call :create_venv
+    if errorlevel 1 exit /b 1
     set "NEEDS_INSTALL=1"
 )
 
@@ -56,3 +38,32 @@ if defined NEEDS_INSTALL (
 echo [run] python server.py %*
 "%VENV_PY%" server.py %*
 exit /b %errorlevel%
+
+:create_venv
+set "BASE_PY="
+
+where py >nul 2>nul
+if not errorlevel 1 set "BASE_PY=py -3"
+
+if not defined BASE_PY (
+    where python3 >nul 2>nul
+    if not errorlevel 1 set "BASE_PY=python3"
+)
+
+if not defined BASE_PY (
+    where python >nul 2>nul
+    if not errorlevel 1 set "BASE_PY=python"
+)
+
+if not defined BASE_PY (
+    echo [run] ERROR: no Python launcher found. Install Python 3.11+ first.
+    exit /b 1
+)
+
+%BASE_PY% -m venv ".venv"
+if not exist "%VENV_PY%" (
+    echo [run] ERROR: failed to create .venv
+    exit /b 1
+)
+
+exit /b 0
