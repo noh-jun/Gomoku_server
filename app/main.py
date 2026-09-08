@@ -29,6 +29,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from . import protocol
 from .account_repository import AccountRepository
 from .board import Color
+from .chat import CHAT_RATE_LIMIT_MAX_MESSAGES, CHAT_RATE_LIMIT_WINDOW_SECONDS
 from .config import ServerConfig
 from .connection import ClientSession, ConnectionManager
 from .database import Database
@@ -38,6 +39,8 @@ from .errors import (
     AlreadyAuthenticatedError,
     AlreadyInRoomError,
     AuthenticationRequiredError,
+    ChatNotAvailableError,
+    ChatRateLimitedError,
     ForbiddenMoveError,
     GameError,
     InvalidCredentialsError,
@@ -62,6 +65,7 @@ from .protocol import (
     ProtocolError,
     ReadyCommand,
     ResignCommand,
+    ChatCommand,
     UndoRequestCommand,
     UndoResponseCommand,
 )
@@ -223,6 +227,8 @@ async def handle_client_message(
         await _handle_undo_response(gateway, session, command)
     elif isinstance(command, ResignCommand):
         await _handle_resign(gateway, session)
+    elif isinstance(command, ChatCommand):
+        await _handle_chat(gateway, session, command)
 
 
 # ----------------------------------------------------------------------
@@ -690,6 +696,45 @@ async def _handle_resign(gateway: Gateway, session: ClientSession) -> None:
     await gateway.manager.broadcast_to_room(room, _game_state(room))
     _sync_turn_timer(gateway, room)
     await _broadcast_room_list(gateway)
+
+
+async def _handle_chat(
+    gateway: Gateway, session: ClientSession, command: ChatCommand
+) -> None:
+    """Relay one chat line to everybody in the sender's room, sender included.
+
+    Nothing is stored: the room is the only scope and the echo is the only
+    acknowledgement, so every member renders the same log in the same order.
+    """
+    try:
+        try:
+            room = _require_room(gateway, session)
+            _, nickname = _require_authenticated_account(session)
+        except (NotInRoomError, AuthenticationRequiredError):
+            raise ChatNotAvailableError()
+        _enforce_chat_rate_limit(session)
+    except GameError as exc:
+        await _send_error(gateway, session, exc.code, exc.message)
+        return
+
+    sent_at_unix_ms = int(time.time() * 1000)
+    logger.info(
+        "[ROOM %s] chat from %s (%d chars)", room.room_id, nickname, len(command.text)
+    )
+    await gateway.manager.broadcast_to_room(
+        room, protocol.chat_message(nickname, command.text, sent_at_unix_ms)
+    )
+
+
+def _enforce_chat_rate_limit(session: ClientSession) -> None:
+    """Allow ``CHAT_RATE_LIMIT_MAX_MESSAGES`` per rolling window per connection."""
+    now = time.monotonic()
+    window = session.chat_sent_at
+    while window and now - window[0] >= CHAT_RATE_LIMIT_WINDOW_SECONDS:
+        window.popleft()
+    if len(window) >= CHAT_RATE_LIMIT_MAX_MESSAGES:
+        raise ChatRateLimitedError()
+    window.append(now)
 
 
 async def _handle_undo_response(

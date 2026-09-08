@@ -17,7 +17,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from dataclasses import dataclass
+from collections import deque
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Iterable, Mapping, Optional
 from uuid import uuid4
@@ -63,6 +64,8 @@ class ClientSession:
     account_id: Optional[str] = None
     account_nickname: Optional[str] = None
     account_request_pending: bool = False
+    #: Monotonic send times of recent chat messages, for the rate limit.
+    chat_sent_at: deque[float] = field(default_factory=deque)
 
     @property
     def state(self) -> ConnectionState:

@@ -13,6 +13,7 @@ from enum import Enum
 from typing import Any, Mapping, Optional, Sequence, Union
 
 from .board import Color, is_integer_coordinate
+from .chat import normalize_chat_text
 from .account import normalize_account_id, validate_password, validated_nickname
 from .config import GameSettings
 from .config import SUPPORTED_TURN_TIME_LIMITS
@@ -38,6 +39,7 @@ class ClientMessageType(str, Enum):
     UNDO_REQUEST = "undo_request"
     UNDO_RESPONSE = "undo_response"
     RESIGN = "resign"
+    CHAT = "chat"
     PING = "ping"
     CREATE_ACCOUNT = "create_account"
     LOGIN = "login"
@@ -62,6 +64,7 @@ class ServerMessageType(str, Enum):
     UNDO_REQUESTED = "undo_requested"
     UNDO_RESULT = "undo_result"
     TURN_TIMEOUT = "turn_timeout"
+    CHAT_MESSAGE = "chat_message"
     PONG = "pong"
     ACCOUNT_CREATED = "account_created"
     LOGIN_SUCCEEDED = "login_succeeded"
@@ -125,6 +128,9 @@ class ErrorCode(str, Enum):
     INVALID_CREDENTIALS = "INVALID_CREDENTIALS"
     LOGIN_FAILED = "LOGIN_FAILED"
     AUTHENTICATION_REQUIRED = "AUTHENTICATION_REQUIRED"
+    CHAT_NOT_AVAILABLE = "CHAT_NOT_AVAILABLE"
+    CHAT_TEXT_INVALID = "CHAT_TEXT_INVALID"
+    CHAT_RATE_LIMITED = "CHAT_RATE_LIMITED"
 
 
 #: Wording used in the human readable ``message`` of a ``FORBIDDEN_MOVE``
@@ -220,6 +226,11 @@ class ResignCommand:
 
 
 @dataclass(frozen=True)
+class ChatCommand:
+    text: str
+
+
+@dataclass(frozen=True)
 class PingCommand:
     pass
 
@@ -238,6 +249,7 @@ ClientCommand = Union[
     UndoRequestCommand,
     UndoResponseCommand,
     ResignCommand,
+    ChatCommand,
     PingCommand,
 ]
 
@@ -328,6 +340,16 @@ def parse_client_message(raw: str) -> ClientCommand:
         return UndoRequestCommand()
     if message_type is ClientMessageType.RESIGN:
         return ResignCommand()
+    if message_type is ClientMessageType.CHAT:
+        if "text" not in payload:
+            raise ProtocolError(
+                ErrorCode.CHAT_TEXT_INVALID, "A 'chat' message requires a 'text' field."
+            )
+        try:
+            text = normalize_chat_text(payload["text"])
+        except GameError as exc:
+            raise ProtocolError(ErrorCode(exc.code), exc.message)
+        return ChatCommand(text=text)
     if message_type is ClientMessageType.UNDO_RESPONSE:
         accepted = payload.get("accepted")
         if not isinstance(accepted, bool):
@@ -511,6 +533,15 @@ def room_members(
             {"nickname": nicknames[connection_id]}
             for connection_id in room.observer_connection_ids()
         ],
+    }
+
+
+def chat_message(nickname: str, text: str, sent_at_unix_ms: int) -> dict[str, Any]:
+    return {
+        "type": ServerMessageType.CHAT_MESSAGE.value,
+        "nickname": nickname,
+        "text": text,
+        "sent_at_unix_ms": sent_at_unix_ms,
     }
 
 

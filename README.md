@@ -20,6 +20,7 @@ Python, FastAPI, WebSocket으로 구현한 서버 권한형(authoritative) 오�
 - [렌주 금수 착수 금지 전환 클라이언트 개발 지시서](../client/docs/renju-forbidden-block-client-development-guide.md)
 - [Ready 서버 계약](docs/ready-server-contract.md)
 - [Room Player/Observer 서버 계약](docs/room-role-server-contract.md)
+- [Room 채팅 서버 계약](docs/room-chat-server-contract.md)
 
 ## 요구 사항
 

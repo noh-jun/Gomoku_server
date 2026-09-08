@@ -283,6 +283,21 @@ class NicknameInvalidCharacterError(InvalidNicknameError):
     default_message = "The nickname contains a forbidden character."
 
 
+class ChatNotAvailableError(GameError):
+    code = "CHAT_NOT_AVAILABLE"
+    default_message = "Chat is only available to authenticated members inside a room."
+
+
+class ChatTextInvalidError(GameError):
+    code = "CHAT_TEXT_INVALID"
+    default_message = "Chat text must contain 1 to 200 characters."
+
+
+class ChatRateLimitedError(GameError):
+    code = "CHAT_RATE_LIMITED"
+    default_message = "Too many chat messages; wait a moment and try again."
+
+
 class AlreadyAuthenticatedError(GameError):
     code = "ALREADY_AUTHENTICATED"
     default_message = "This connection is already authenticated."
