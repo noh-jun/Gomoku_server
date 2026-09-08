@@ -408,6 +408,16 @@ def test_game_state_while_playing() -> None:
     assert "forbidden_type" not in state
 
 
+def test_game_state_carries_server_remaining_time() -> None:
+    state = game_state(
+        GomokuGame(), turn_remaining_ms=12_500, turn_revision=7
+    )
+
+    assert state["turn_remaining_ms"] == 12_500
+    assert state["turn_revision"] == 7
+    assert "turn_deadline_unix_ms" not in state
+
+
 def test_game_state_after_a_win_keeps_the_result() -> None:
     game = finished_game([(3, 7), (4, 7), (5, 7), (6, 7), (7, 7)])
 

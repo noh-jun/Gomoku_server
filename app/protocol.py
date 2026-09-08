@@ -675,7 +675,7 @@ def forbidden_moves(
 
 def game_state(
     game: GameEngine,
-    turn_deadline_unix_ms: Optional[int] = None,
+    turn_remaining_ms: Optional[int] = None,
     turn_revision: int = 0,
 ) -> dict[str, Any]:
     """Full state synchronisation, including the result of a finished game."""
@@ -689,7 +689,7 @@ def game_state(
         "status": game.status.value,
         "game_over_reason": game.reason.value if game.reason else None,
         "last_move": point(game.last_move),
-        "turn_deadline_unix_ms": turn_deadline_unix_ms,
+        "turn_remaining_ms": turn_remaining_ms,
         "turn_revision": turn_revision,
     }
     if game.game_type is GameType.OTHELLO:

@@ -775,7 +775,7 @@ async def _handle_undo_response(
 def _game_state(room: GameRoom) -> dict[str, Any]:
     return protocol.game_state(
         room.game,
-        turn_deadline_unix_ms=room.turn_deadline_unix_ms,
+        turn_remaining_ms=room.turn_remaining_ms,
         turn_revision=room.turn_revision,
     )
 

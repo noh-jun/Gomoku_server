@@ -19,6 +19,7 @@ The room never touches a WebSocket; that is
 from __future__ import annotations
 
 import asyncio
+import math
 import time
 from dataclasses import dataclass, field
 from enum import Enum
@@ -191,7 +192,6 @@ class GameRoom:
         self.starting_color: Color = starting_color
         self.turn_time_limit_sec: Optional[int] = turn_time_limit_sec
         self.turn_deadline_monotonic: Optional[float] = None
-        self.turn_deadline_unix_ms: Optional[int] = None
         self.turn_revision: int = 0
         self.paused_turn_remaining_sec: Optional[float] = None
         #: connection_id -> color of the current round (insertion = join order)
@@ -302,20 +302,25 @@ class GameRoom:
     def _clear_turn_timer_locked(self) -> None:
         self.turn_revision += 1
         self.turn_deadline_monotonic = None
-        self.turn_deadline_unix_ms = None
         self.paused_turn_remaining_sec = None
 
     def _start_turn_timer_locked(self, duration: Optional[float] = None) -> None:
         self.turn_revision += 1
         if self.game_type is not GameType.GOMOKU or self.turn_time_limit_sec is None:
             self.turn_deadline_monotonic = None
-            self.turn_deadline_unix_ms = None
             self.paused_turn_remaining_sec = None
             return
         seconds = float(self.turn_time_limit_sec if duration is None else duration)
         self.turn_deadline_monotonic = time.monotonic() + seconds
-        self.turn_deadline_unix_ms = int((time.time() + seconds) * 1000)
         self.paused_turn_remaining_sec = None
+
+    @property
+    def turn_remaining_ms(self) -> Optional[int]:
+        """Server-clock duration left in the current turn, ready for the wire."""
+        deadline = self.turn_deadline_monotonic
+        if deadline is None:
+            return None
+        return max(0, math.ceil((deadline - time.monotonic()) * 1000.0))
 
     def _expire_turn_locked(self) -> Optional[TurnTimeoutResult]:
         deadline = self.turn_deadline_monotonic
@@ -567,7 +572,6 @@ class GameRoom:
                 )
                 self.turn_revision += 1
                 self.turn_deadline_monotonic = None
-                self.turn_deadline_unix_ms = None
             return UndoRequestResult(
                 requester=player,
                 responder_id=responder_id,

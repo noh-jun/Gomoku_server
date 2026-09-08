@@ -37,6 +37,21 @@ async def full_room(board_size: int = DEFAULT_BOARD_SIZE) -> tuple[GameRoom, str
     return room, "conn-1", "conn-2"
 
 
+def test_turn_remaining_ms_uses_only_server_monotonic_clock(monkeypatch) -> None:
+    now = [100.0]
+    monkeypatch.setattr("app.room.time.monotonic", lambda: now[0])
+    room = GameRoom("timer-room", turn_time_limit_sec=30)
+
+    room._start_turn_timer_locked()
+    assert room.turn_remaining_ms == 30_000
+
+    now[0] = 112.25
+    assert room.turn_remaining_ms == 17_750
+
+    now[0] = 131.0
+    assert room.turn_remaining_ms == 0
+
+
 async def play_white_win(room: GameRoom) -> MoveResult:
     """The current WHITE lines up exactly five and wins."""
     white = room.connection_for(Color.WHITE)

@@ -28,12 +28,12 @@ Turn Timer는 `GOMOKU` 방에만 적용한다. `OTHELLO` 방 생성 요청에 �
 ```json
 {
   "turn_time_limit_sec": 10,
-  "turn_deadline_unix_ms": 1788741000123,
+  "turn_remaining_ms": 10000,
   "turn_revision": 7
 }
 ```
 
-- `turn_deadline_unix_ms`: 현재 턴의 서버 기준 Unix epoch 밀리초 마감 시각. 무제한, Ready 대기, Undo 응답 대기, 종료 상태에서는 `null`이다.
+- `turn_remaining_ms`: 서버 monotonic clock으로 계산한 현재 턴의 남은 밀리초. 무제한, Ready 대기, Undo 응답 대기, 종료 상태에서는 `null`이다. 클라이언트 PC의 Unix 시각과 빼서 계산하지 않고, 수신한 duration을 로컬 monotonic clock으로 감소시킨다.
 - `turn_revision`: 타이머가 시작, 중단, 재시작될 때 증가한다. 클라이언트는 더 작은 revision의 이전 상태를 폐기한다.
 - 화면 카운트다운은 안내용이다. 실제 만료 판정은 서버가 수행한다.
 
@@ -50,7 +50,7 @@ Turn Timer는 `GOMOKU` 방에만 적용한다. `OTHELLO` 방 생성 요청에 �
 }
 ```
 
-그 다음 새 deadline을 포함한 `game_state`를 방송한다. 마감과 동시에 도착한 착수도 서버의 room lock 안에서 판정하며, 이미 만료됐다면 착수는 반영하지 않고 요청자에게 `TURN_EXPIRED` 오류를 보낸다.
+그 다음 새 남은 시간을 포함한 `game_state`를 방송한다. 마감과 동시에 도착한 착수도 서버의 room lock 안에서 판정하며, 이미 만료됐다면 착수는 반영하지 않고 요청자에게 `TURN_EXPIRED` 오류를 보낸다.
 
 ## Ready 및 Undo 정책
 
