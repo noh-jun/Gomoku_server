@@ -1,0 +1,22 @@
+# Normalize repository text while preserving native Windows launchers.
+* text=auto eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Do not apply text conversion or inherited EOL rules to binary files.
+*.db binary !eol
+*.sqlite binary !eol
+*.sqlite3 binary !eol
+*.pyc binary !eol
+*.pyo binary !eol
+*.png binary !eol
+*.jpg binary !eol
+*.jpeg binary !eol
+*.gif binary !eol
+*.ico binary !eol
+*.zip binary !eol
+*.gz binary !eol
+*.7z binary !eol
+*.exe binary !eol
+*.dll binary !eol
